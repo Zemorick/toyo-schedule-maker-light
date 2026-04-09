@@ -3289,6 +3289,15 @@ class ToyoSchedulerApp:
                                 if self._active_add_popup is p:
                                     self._active_add_popup = None
                                     self._active_add_btn = None
+                                # The listbox stole keyboard focus via
+                                # focus_force on an overrideredirect popup.
+                                # Without this restore the main window
+                                # ignores clicks until the user clicks
+                                # outside the app.
+                                try:
+                                    toplevel.focus_force()
+                                except tk.TclError:
+                                    pass
                         return handler, cleanup
                     _toplevel = parent.winfo_toplevel()
                     _click_handler, _destroy_handler = _make_close_handler(popup, _toplevel)
