@@ -3374,6 +3374,22 @@ class ToyoSchedulerApp:
                 type_entry.bind("<KeyRelease>", update_preview)
                 type_entry.bind("<Return>", on_type_enter)
 
+                # Tab walks DOWN the same day-column instead of right across
+                # the row, so users can fill an entire day top-to-bottom
+                # before moving to the next day.
+                def on_tab(event, _key=(role_key, shift, day)):
+                    on_type_enter()  # commit any pending text first
+                    self._focus_avail_cell_in_column(_key, 1)
+                    return "break"
+
+                def on_shift_tab(event, _key=(role_key, shift, day)):
+                    on_type_enter()
+                    self._focus_avail_cell_in_column(_key, -1)
+                    return "break"
+
+                type_entry.bind("<Tab>", on_tab)
+                type_entry.bind("<Shift-Tab>", on_shift_tab)
+
             refresh_cell()
             return cell
 
@@ -3433,6 +3449,44 @@ class ToyoSchedulerApp:
 
         # 4. Dinner Servers
         row = add_shift_section(row, "SERVER — DINNER", server_names, "server", "night", "darkblue")
+
+    # Section traversal order for Tab inside an availability cell's typing
+    # entry — walks down a single day's column from host morning to dinner
+    # server, then wraps to the next day's host morning row.
+    _AVAIL_COLUMN_ORDER = [
+        ("host", "morning"),
+        ("server", "morning"),
+        ("host", "night"),
+        ("server", "night"),
+    ]
+
+    def _focus_avail_cell_in_column(self, current_key, direction):
+        """Move focus to the next/previous typing entry in the same day-column.
+
+        direction = +1 walks down (host morning → server lunch → ... →
+        server dinner → next day's host morning); -1 walks up. Wraps at
+        the ends so the user never gets stuck."""
+        role, shift, day = current_key
+        try:
+            section_idx = self._AVAIL_COLUMN_ORDER.index((role, shift))
+            day_idx = DAYS.index(day)
+        except ValueError:
+            return
+        section_idx += direction
+        if section_idx >= len(self._AVAIL_COLUMN_ORDER):
+            section_idx = 0
+            day_idx = (day_idx + 1) % len(DAYS)
+        elif section_idx < 0:
+            section_idx = len(self._AVAIL_COLUMN_ORDER) - 1
+            day_idx = (day_idx - 1) % len(DAYS)
+        new_role, new_shift = self._AVAIL_COLUMN_ORDER[section_idx]
+        new_key = (new_role, new_shift, DAYS[day_idx])
+        next_cell = self._cell_widgets.get(new_key)
+        if next_cell is not None and hasattr(next_cell, "_type_entry"):
+            try:
+                next_cell._type_entry.focus_set()
+            except tk.TclError:
+                pass
 
     def _set_default_availability(self):
         """Reset everyone to off, then restore the fulltimers (fixed-schedule
